@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Every Row Was There</title>
+<meta name="description" content="How a renamed form column silently wiped 12,247 CV links from a recruitment pipeline while every existing check passed, and the content-coverage guard that now makes it fail loudly.">
+<style>
+:root{
+  color-scheme:light;
+  --bg:#fcfcfb; --surface:#ffffff; --ink:#0b0b0b; --ink-2:#52514e; --ink-3:#7a7974; --line:#e6e4df; --code:#f3f2ee;
+  --ok:#2a78d6; --bad:#eb6834; --accent:#2a78d6; --accent-soft:#eaf2fc; --pass:#1a7f4b; --fail:#c2410c;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:where(:not([data-theme="light"])){
+    color-scheme:dark;
+    --bg:#141413; --surface:#1a1a19; --ink:#f0efec; --ink-2:#c3c2b7; --ink-3:#8f8e86; --line:#2d2d2a; --code:#232321;
+    --ok:#3987e5; --bad:#d95926; --accent:#3987e5; --accent-soft:#1d2a3b; --pass:#4ade80; --fail:#fb923c;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#141413; --surface:#1a1a19; --ink:#f0efec; --ink-2:#c3c2b7; --ink-3:#8f8e86; --line:#2d2d2a; --code:#232321;
+  --ok:#3987e5; --bad:#d95926; --accent:#3987e5; --accent-soft:#1d2a3b; --pass:#4ade80; --fail:#fb923c;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:780px;margin:0 auto;padding:48px 16px 80px}
+.kicker{font:600 12px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+h1{font-size:clamp(30px,6vw,44px);line-height:1.1;margin:10px 0 12px;letter-spacing:-.02em}
+.lede{font-size:19px;color:var(--ink-2);margin:0 0 8px}
+.byline{font-size:14px;color:var(--ink-2);margin-bottom:28px}
+a{color:var(--accent)}
+h2{font-size:22px;margin:44px 0 8px;letter-spacing:-.01em}
+h2 .n{font:600 13px/1 var(--mono);color:var(--ink-3);margin-right:8px}
+p{margin:10px 0}
+code{font-family:var(--mono);font-size:.88em;background:var(--code);padding:1px 5px;border-radius:4px}
+pre{font-family:var(--mono);font-size:13px;line-height:1.55;background:var(--code);padding:14px 16px;border-radius:10px;overflow-x:auto}
+.c{color:var(--ink-3)}
+ul li,ol li{margin:6px 0}
+.callout{border-left:3px solid var(--accent);background:var(--accent-soft);padding:12px 16px;border-radius:0 10px 10px 0;margin:18px 0}
+.credit{border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:12px 16px;font-size:14.5px;color:var(--ink-2)}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:16px 0}
+.fact{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.fact .v{font-size:24px;font-weight:650;font-variant-numeric:tabular-nums}
+.fact .k{font-size:13px;color:var(--ink-2)}
+figure{margin:18px 0}
+figure img{width:100%;height:auto;border:1px solid var(--line);border-radius:12px;display:block}
+figcaption{font-size:13px;color:var(--ink-2);margin-top:6px}
+
+/* pipeline diagram */
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:stretch;margin:16px 0}
+.stage{flex:1 1 120px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:9px 10px;position:relative;transition:border-color .25s,background .25s}
+.stage .s{font:600 11px/1 var(--mono);color:var(--ink-3);letter-spacing:.05em}
+.stage .t{font-weight:600;font-size:14px;margin-top:4px}
+.stage .d{font-size:12.5px;color:var(--ink-2);line-height:1.35}
+.stage.on{border-color:var(--accent)}
+.stage.broke{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 10%,var(--surface))}
+.stage.stop{border-color:var(--fail);background:color-mix(in srgb,var(--fail) 10%,var(--surface))}
+
+/* sim */
+.viz{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px;margin:22px 0}
+.seg{display:inline-flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:9px;overflow:hidden;margin-bottom:6px}
+.seg button{border:0;background:transparent;color:var(--ink);font:500 14px/1.2 system-ui,sans-serif;padding:10px 14px;cursor:pointer;text-align:left}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.scen{font-size:14px;color:var(--ink-2);margin:8px 0 12px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.panel{border:1px solid var(--line);border-radius:12px;padding:12px}
+.panel h4{margin:0 0 8px;font:600 12px/1 var(--mono);text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3)}
+.check{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px;padding:6px 0;border-bottom:1px dashed var(--line)}
+.check:last-child{border-bottom:0}
+.badge{font:600 12px/1 var(--mono);padding:4px 7px;border-radius:6px;white-space:nowrap}
+.badge.pass{color:var(--pass);background:color-mix(in srgb,var(--pass) 14%,transparent)}
+.badge.fail{color:var(--fail);background:color-mix(in srgb,var(--fail) 14%,transparent)}
+.badge.na{color:var(--ink-3);background:var(--code)}
+.meter{height:14px;border-radius:7px;background:var(--code);overflow:hidden;display:flex;gap:2px;margin:8px 0 6px}
+.meter i{display:block;height:100%;transition:width .4s}
+.meter .a{background:var(--ok);border-radius:7px 0 0 7px}
+.meter .b{background:var(--bad);border-radius:0 7px 7px 0}
+.big{font-size:22px;font-weight:650;font-variant-numeric:tabular-nums}
+.small{font-size:13px;color:var(--ink-2)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--ink-2)}
+.legend i{width:10px;height:10px;border-radius:3px;display:inline-block;margin-right:5px;vertical-align:-1px}
+.verdict{margin-top:14px;font-size:15px}
+.verdict b.good{color:var(--pass)} .verdict b.bad{color:var(--fail)}
+footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--line);font-size:14px;color:var(--ink-2)}
+@media (max-width:600px){ .cols{grid-template-columns:1fr} .seg{display:flex;flex-direction:column} .seg button+button{border-left:0;border-top:1px solid var(--line)} }
+</style>
+</head>
+<body>
+<main>
+  <div class="kicker">Incident walkthrough</div>
+  <h1>Every row was still there</h1>
+  <p class="lede">How a renamed form column wiped 12,247 CV links from a live recruitment pipeline while every check passed, and how I made that kind of failure loud.</p>
+  <p class="byline">Charlene Athena &middot; Eterna Indonesia, August 2026 &middot; <a href="https://github.com/lilyofthevaleys">github.com/lilyofthevaleys</a></p>
+
+  <div class="credit"><b>Who built what.</b> The pipeline was built by an intern team at Eterna Indonesia. My part was this incident: diagnosing the loss, recovering the data, fixing the mapper and adding the guard described below. Internal names and all candidate data are left out on purpose.</div>
+
+  <h2><span class="n">01</span>The system</h2>
+  <p>Eterna Indonesia is an outsourcing company that recruits at volume. Applicants come in through three recruitment funnels built on Google Forms. Every six hours, a scheduled batch job rebuilds the candidate dataset from scratch and publishes it to two places: a CV search app for recruiters, and the company&rsquo;s HR portal.</p>
+  <div class="flow" id="flow">
+    <div class="stage" data-st="0"><div class="s">1</div><div class="t">Ingest</div><div class="d">3 funnels from Google Sheets</div></div>
+    <div class="stage" data-st="1"><div class="s">2</div><div class="t">Map columns</div><div class="d">form headers &rarr; fields, incl. CV file link</div></div>
+    <div class="stage" data-st="2"><div class="s">3</div><div class="t">Parse &amp; enrich</div><div class="d">CV text, derived fields, embeddings</div></div>
+    <div class="stage" data-st="3"><div class="s">4</div><div class="t">Validate</div><div class="d">schema and data checks</div></div>
+    <div class="stage" data-st="4"><div class="s">5</div><div class="t">Publish</div><div class="d">search app + portal, every 6 h</div></div>
+  </div>
+  <figure>
+    <img src="img/careers-desktop.jpg" alt="Eterna Indonesia public careers page: Find your place in the network" loading="lazy">
+    <figcaption>Eterna&rsquo;s public careers page (screenshot taken with Playwright). The recruiters who review these applicants work in the same HR portal the pipeline feeds. Internal screens are not shown because they contain candidate data.</figcaption>
+  </figure>
+
+  <h2><span class="n">02</span>The symptom</h2>
+  <p>Recruiters suddenly saw no CV for most candidates in the portal. Nothing had crashed, and the existing checks were passing.</p>
+  <div class="facts">
+    <div class="fact"><div class="v">14,941</div><div class="k">candidates in the dataset</div></div>
+    <div class="fact"><div class="v">12,247</div><div class="k">had lost their CV link</div></div>
+    <div class="fact"><div class="v">82%</div><div class="k">of CV links gone, with no error raised</div></div>
+  </div>
+
+  <h2><span class="n">03</span>The cause</h2>
+  <p>The intake forms had been edited, and the column holding the CV upload now had a different header. The mapper matched headers <i>exactly</i>, so it no longer found the CV column. It did not fail; it simply produced an empty CV field for every affected row. Because the job rebuilds everything every six hours, the next run overwrote the good links in production with blanks.</p>
+<pre><span class="c"># before: one exact header, silently missing after the form edit</span>
+cv_file_id = row.get(OLD_CV_HEADER)          <span class="c"># -&gt; None for most rows</span>
+
+<span class="c"># after: every real header spelling, found by checking the actual sheets</span>
+CV_HEADERS = [...]                            <span class="c"># all 4 variants in use</span>
+cv_file_id = first_present(row, CV_HEADERS)</pre>
+  <p class="small">Simplified for illustration; real header names omitted.</p>
+  <div class="callout"><b>Why no check caught it.</b> The existing checks counted rows and validated dates. Every row was still there, and every date was still valid. The data was intact in <i>shape</i> and broken in <i>content</i>. No check looked at whether a column that is usually full had suddenly gone empty.</div>
+
+  <h2><span class="n">04</span>Try it</h2>
+  <p>Run the pipeline under three conditions and watch what reaches production.</p>
+  <div class="viz">
+    <div class="seg" role="group" aria-label="Scenario">
+      <button data-sc="normal" aria-pressed="true">Normal run</button>
+      <button data-sc="bug" aria-pressed="false">Header renamed, old checks</button>
+      <button data-sc="guard" aria-pressed="false">Header renamed, with coverage guard</button>
+    </div>
+    <p class="scen" id="scen"></p>
+    <div class="cols">
+      <div class="panel">
+        <h4>Checks this run</h4>
+        <div class="check"><span>Row count within normal range</span><span class="badge" id="c1"></span></div>
+        <div class="check"><span>Dates valid</span><span class="badge" id="c2"></span></div>
+        <div class="check"><span>CV coverage per funnel (fail if it drops &gt;10%)</span><span class="badge" id="c3"></span></div>
+      </div>
+      <div class="panel">
+        <h4>Production after this run</h4>
+        <div class="big" id="links">Intact</div>
+        <div class="small" id="linksub">CV links in production</div>
+        <div class="meter" aria-hidden="true"><i class="a" id="ma"></i><i class="b" id="mb"></i></div>
+        <div class="legend"><span><i style="background:var(--ok)"></i>CV link present</span><span><i style="background:var(--bad)"></i>CV link lost</span></div>
+      </div>
+    </div>
+    <p class="verdict" id="verdict" aria-live="polite"></p>
+  </div>
+
+  <h2><span class="n">05</span>The fix</h2>
+  <ol>
+    <li><b>Recover the data.</b> The raw form responses still held every upload, so all 12,247 links could be rebuilt from source rather than patched by hand.</li>
+    <li><b>Fix the mapper.</b> I listed the header spellings actually present across the three funnels (four variants) and matched all of them, instead of assuming one.</li>
+    <li><b>Guard on content, not just shape.</b> I added a per-funnel check on CV coverage: if the share of candidates with a CV link drops by more than 10%, the run fails and production keeps the last good data. The pull request showed before-and-after coverage for every funnel; one funnel had gone from 100% to 0%.</li>
+    <li><b>Never overwrite good with empty.</b> Together with a portal-side change, the ingest no longer replaces a stored CV link with a blank value.</li>
+  </ol>
+
+  <h2><span class="n">06</span>A side finding</h2>
+  <p>While checking the pipeline&rsquo;s freshness gate, I looked at the hour-of-day distribution of 14,249 application timestamps. The distribution showed the timestamps were stored as Jakarta wall-clock time, not UTC as the gate assumed. I documented it and proposed a corrected staleness check; that change was not merged.</p>
+
+  <h2><span class="n">07</span>What I took from it</h2>
+  <ul>
+    <li><b>Silence is a failure mode.</b> The most expensive bugs here raised no error. A pipeline should fail loudly when the data stops looking like itself, not only when code throws.</li>
+    <li><b>Check what the data means, not just its shape.</b> Row counts and schemas pass when a column quietly empties. A coverage check on columns that matter costs a few lines and catches a whole class of failures.</li>
+    <li><b>Rebuild-from-scratch pipelines need a brake.</b> Regenerating everything every run is simple and robust, until a bad run overwrites good data. Failing the run before publishing keeps the last good version live.</li>
+  </ul>
+
+  <footer>Written by Charlene Athena. Numbers are from the incident and its pull request; code is simplified and internal names are omitted. The pipeline itself was built by an Eterna intern team.</footer>
+</main>
+
+<script>
+(function(){
+  var TOTAL=14941, LOST=12247;
+  var S={
+    normal:{text:"Before the incident: the forms are unchanged, and every CV column is found and published.",c:["pass","pass","na"],links:TOTAL,stages:[],verdict:'<b class="good">Healthy run.</b> All candidates keep their CV links.'},
+    bug:{text:"The CV column header changed. The mapper finds nothing and fills the CV field with blanks.",c:["pass","pass","na"],links:TOTAL-LOST,stages:[[1,"broke"]],verdict:'<b class="bad">Silent failure.</b> Every check passes, the run is green, and 12,247 CV links are overwritten with blanks in production.'},
+    guard:{text:"Same renamed header, but the guard compares CV coverage per funnel with the last good run.",c:["pass","pass","fail"],links:TOTAL,stages:[[1,"broke"],[3,"stop"]],verdict:'<b class="good">Loud failure.</b> Coverage collapsed, so the run stops before publishing. Production keeps the last good data.'}
+  };
+  var label={pass:"PASS",fail:"FAIL",na:"NOT CHECKED"};
+  function set(id,st){var e=document.getElementById(id);e.className="badge "+st;e.textContent=label[st];}
+  function render(k){
+    var s=S[k];
+    document.getElementById("scen").textContent=s.text;
+    set("c1",s.c[0]);set("c2",s.c[1]);set("c3",s.c[2]);
+    document.getElementById("links").textContent=s.links===TOTAL?"All intact":LOST.toLocaleString("en-US")+" lost";document.getElementById("linksub").textContent=s.links===TOTAL?"CV links in production":"CV links overwritten with blanks (82%)";
+    var pa=s.links/TOTAL*100;
+    document.getElementById("ma").style.width=pa+"%";
+    document.getElementById("mb").style.width=(100-pa)+"%";
+    document.getElementById("ma").style.borderRadius=pa>=100?"7px":"7px 0 0 7px";
+    document.querySelectorAll("#flow .stage").forEach(function(el){el.classList.remove("on","broke","stop");});
+    s.stages.forEach(function(p){document.querySelector('#flow .stage[data-st="'+p[0]+'"]').classList.add(p[1]);});
+    document.getElementById("verdict").innerHTML=s.verdict;
+  }
+  document.querySelectorAll("[data-sc]").forEach(function(b){b.addEventListener("click",function(){
+    document.querySelectorAll("[data-sc]").forEach(function(x){x.setAttribute("aria-pressed",x===b);});render(b.dataset.sc);});});
+  render("normal");
+})();
+</script>
+</body>
+</html>
